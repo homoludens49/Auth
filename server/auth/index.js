@@ -1,13 +1,13 @@
 const express = require('express')
 const router = express.Router()
 const Joi  = require('@hapi/joi')
-
+const bcrypt  = require('bcryptjs')
 const db  = require('../db/connections')
 const users = db.get('users')
 users.createIndex('username', {unique: true})
 
 
-//saddsa
+
 
 const schema = Joi.object({
     username: Joi.string()
@@ -17,6 +17,7 @@ const schema = Joi.object({
         .required(),
     password: Joi.string()
         .pattern(new RegExp("(?=[A-Za-z0-9@#$%^&+!=]+$)^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.{8,}).*$"))
+        .trim()
         .required(),
 })
 
@@ -26,7 +27,7 @@ router.get ('/', (req, res)=> {
     })
 })
 
-router.post('/signup', (req, res)=>{
+router.post('/signup', (req, res, next)=>{
 //Working validation 
     // const validation = schema.validate(req.body)
     // let {error} = validation
@@ -37,29 +38,31 @@ router.post('/signup', (req, res)=>{
     // }
 
     const validation = schema.validate(req.body)
-    let {error} = validation
-    if (error){
-        return res.json(error)
-        
+    console.log(validation.error)
+    if ( validation.error == null){
+        users.findOne({
+            username: req.body.username
+        }).then(user => {
+            if(user){ 
+                const error = new Error('A user with this name already exists')
+                next(error)
+            }else{
+                bcrypt.hash(req.body.password.trim(), 8).then(hashedPassword =>{
+                    const newUser = {
+                        username: req.body.username, 
+                        password:hashedPassword
+                    }
+                    users.insert(newUser).then(insertedUser => {
+                        delete insertedUser.password
+                        res.json(insertedUser)
+                    }) 
+                })
+            }
+        })
     }else{
-        users.insert({ username: req.body.username, password: req.body.password })
-        return res.json({message : "all chill"})
-        
+        next(validation.error)
     }
 
-    
-  
-
-    const body = Object.values(req.body)
-    for (let i=0; i<body.length; i++) {
-        console.log(body[i])
-    }
-        
-    
-    
-    
- 
-    
 })
 
 module.exports = router
